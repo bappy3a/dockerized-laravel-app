@@ -1,0 +1,154 @@
+networks:
+  laravel:
+    name: laravel
+
+services:
+  nginx:
+    build:
+      context: .
+      dockerfile: nginx.dockerfile
+    container_name: blog_nginx
+    tty: true
+    depends_on:
+      - php
+      - mysql
+    ports:
+      - 80:80
+      - 443:443
+    volumes:
+      - ./src:/var/www/html
+    networks:
+      - laravel
+  php:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: blog_php
+    restart: unless-stopped
+    tty: true
+    volumes:
+      - ./src:/var/www/html
+    networks:
+      - laravel
+
+  mysql:
+    image: mysql:latest
+    container_name: blog_mysql
+    ports:
+      - 3306:3306
+    volumes:
+      - ./mysql:/var/lib/mysql
+    environment:
+      MYSQL_DATABASE: docker_laravel
+      MYSQL_USER: laravel
+      MYSQL_PASSWORD: secret
+      MYSQL_ROOT_PASSWORD: secret
+    networks:
+      - laravel
+
+  composer:
+    image: composer:latest
+    container_name: blog_composer
+    volumes:
+      - ./src:/var/www/html
+    working_dir: /var/www/html
+    command: ["install", "--ignore-platform-reqs"]
+    depends_on:
+      - php
+    networks:
+      - laravel
+
+  artisan:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: blog_artisan
+    volumes:
+      - ./src:/var/www/html
+    working_dir: /var/www/html
+    entrypoint: ["php", "artisan"]
+    networks:
+      - laravel
+
+  npm:
+    image: node:20.11.1
+    container_name: blog_npm
+    volumes:
+      - ./src:/var/www/html
+    working_dir: /var/www/html
+    entrypoint: ['npm']
+    networks:
+      - laravel
+
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: blog_mailpit
+    ports:
+      - 1025:1025
+      - 8025:8025
+    networks:
+      - laravel
+
+  redis:
+    image: 'redis:alpine'
+    container_name: blog_redis
+    restart: unless-stopped
+    ports:
+      - '6379:6379'
+    volumes:
+      - './redisdata:/data'
+    networks:
+      - laravel
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      retries: 3
+      timeout: 5s
+
+  soketi:
+    image: 'quay.io/soketi/soketi:latest-16-alpine'
+    container_name: blog_soketi
+    environment:
+      SOKETI_DEBUG: '1'
+      SOKETI_METRICS_SERVER_PORT: '9601'
+    ports:
+      - '${PUSHER_PORT:-6001}:6001'
+      - '${SOKETI_METRICS_SERVER_PORT:-9601}:9601'
+    networks:
+      - laravel
+
+  jenkins:
+    image: jenkins/jenkins:lts
+    container_name: blog_jenkins
+    ports:
+      - '8080:8080'
+      - '50000:50000'
+    volumes:
+      - './jenkins:/var/jenkins_home'
+    networks:
+      - laravel
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.10.1
+    container_name: blog_elasticsearch
+    environment:
+      - discovery.type=single-node
+    volumes:
+      - './elasticsearch:/usr/share/elasticsearch/data'
+    ports:
+      - '9200:9200'
+      - '9300:9300'
+    networks:
+      - laravel
+
+  sonarqube:
+    image: sonarqube:latest
+    container_name: blog_sonarqube
+    ports:
+      - '9000:9000'
+    volumes:
+      - './sonarqube_conf:/opt/sonarqube/conf'
+      - './sonarqube_data:/opt/sonarqube/data'
+      - './sonarqube_extensions:/opt/sonarqube/extensions'
+      - './sonarqube_bundled-plugins:/opt/sonarqube/lib/bundled-plugins'
+    networks:
+      - laravel
